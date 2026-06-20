@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vintage PDF Typing Speed Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Typewriter Theme Colors */
+            --bg-color: #2c2824;
+            --paper-color: #fdfbf7;
+            --paper-lines: #eaddc5;
+            --ink-color: #2b2b2b;
+            --faded-ink: rgba(43, 43, 43, 0.35);
+            --error-ink: #a51c1c;
+            --panel-bg: #d9d2c5;
+        }
+
+        body {
+            font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at center, #3d3833 0%, #1a1815 100%);
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        h1 {
+            color: #eaddc5;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            margin-bottom: 2rem;
+        }
+
+        /* Vintage Control Panels */
+        .controls-container, .stats-container {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .controls-container {
+            background: var(--panel-bg);
+            color: var(--ink-color);
+            padding: 1rem 2rem;
+            border-radius: 4px;
+            border: 2px solid #8b8378;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1), 0 5px 15px rgba(0,0,0,0.4);
+        }
+
+        .stat-box {
+            background: var(--panel-bg);
+            color: var(--ink-color);
+            padding: 1rem 2rem;
+            border-radius: 4px;
+            border: 2px solid #8b8378;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1), 0 5px 15px rgba(0,0,0,0.4);
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .stat-box span {
+            display: block;
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: #1a1a1a;
+            margin-top: 0.5rem;
+            text-shadow: 1px 1px 0px rgba(255,255,255,0.5);
+        }
+
+        input[type="file"], select {
+            font-family: inherit;
+            background: white;
+            border: 1px solid #999;
+            padding: 0.3rem;
+        }
+
+        button {
+            font-family: inherit;
+            font-weight: bold;
+            padding: 0.5rem 1.5rem;
+            background-color: #5c544d;
+            color: #fdfbf7;
+            border: 2px solid #333;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-transform: uppercase;
+            box-shadow: 2px 2px 0px #1a1a1a;
+            transition: all 0.1s;
+        }
+
+        button:active {
+            transform: translate(2px, 2px);
+            box-shadow: 0px 0px 0px #1a1a1a;
+        }
+
+        /* Paper Typing Area Styling */
+        .typing-container {
+            position: relative;
+            max-width: 850px;
+            width: 100%;
+            background-color: var(--paper-color);
+            color: var(--ink-color);
+            padding: 3rem 4rem;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            font-size: 1.4rem;
+            
+            line-height: 2.5rem;
+            background-image: linear-gradient(transparent 95%, var(--paper-lines) 100%);
+            background-size: 100% 2.5rem;
+            
+            cursor: text;
+            min-height: 300px;
+            overflow: hidden;
+            border-radius: 2px;
+        }
+
+        #text-display {
+            pointer-events: none;
+        }
+
+        .char {
+            color: var(--faded-ink);
+            transition: color 0.05s;
+        }
+
+        .char.correct {
+            color: var(--ink-color);
+            font-weight: bold;
+            text-shadow: 0 0 1px rgba(0,0,0,0.4); 
+        }
+
+        .char.incorrect {
+            color: var(--error-ink);
+            text-decoration: line-through;
+            text-decoration-thickness: 2px;
+            background-color: rgba(165, 28, 28, 0.1);
+        }
+
+        .char.active {
+            border-left: 2px solid var(--ink-color);
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            50% { border-color: transparent; }
+        }
+
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
+
+        /* --- NEW MODAL POPUP STYLES --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: var(--panel-bg);
+            color: var(--ink-color);
+            padding: 3rem;
+            border-radius: 4px;
+            border: 3px solid #8b8378;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1), 0 15px 40px rgba(0,0,0,0.8);
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+        }
+
+        .modal-overlay.show .modal-content {
+            transform: translateY(0);
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            font-size: 2.5rem;
+            color: #1a1a1a;
+            border-bottom: 2px solid #8b8378;
+            padding-bottom: 1rem;
+            text-transform: uppercase;
+        }
+
+        .modal-stats {
+            font-size: 1.5rem;
+            margin: 2rem 0;
+            text-align: left;
+            background: rgba(255,255,255,0.4);
+            padding: 1.5rem;
+            border: 1px solid #8b8378;
+        }
+
+        .modal-stats p {
+            margin: 0.5rem 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .modal-stats span {
+            font-weight: bold;
+            color: #1a1a1a;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+        }
+	
+	.watermark-overlay {
+    		position: fixed;
+    		top: 79%;
+    		left: 70%;
+    		transform: translate(-50%, -50%);
+    		font-size: 3rem;
+    		font-weight: bold;
+    		color: rgba(0, 0, 0, 0.04); /* Ultra-low opacity */
+    		z-index: 9999;
+    		pointer-events: none; /* Allows users to click buttons behind it */
+    		white-space: nowrap;
+    		user-select: none; /* Prevents users from selecting the text */
+  	}
+    </style>
+</head>
+<body>
+
+    <h1>Typewriter Speed Test</h1>
+
+    <div class="controls-container">
+        <div>
+            <label for="pdf-upload"><strong>Load Document:</strong></label><br>
+            <input type="file" id="pdf-upload" accept="application/pdf">
+        </div>
+        <div>
+            <label for="time-select"><strong>Set Timer:</strong></label><br>
+            <select id="time-select">
+                <option value="60">1 Minute</option>
+                <option value="120">2 Minutes</option>
+                <option value="180">3 Minutes</option>
+                <option value="300">5 Minutes</option>
+            </select>
+        </div>
+        <button id="reset-btn">Reset Typewriter</button>
+    </div>
+
+    <div class="stats-container">
+        <div class="stat-box">Time <span id="time-left">60s</span></div>
+        <div class="stat-box">WPM <span id="wpm">0</span></div>
+        <div class="stat-box">Accuracy <span id="accuracy">100%</span></div>
+        <div class="stat-box">Errors <span id="mistakes">0</span></div>
+    </div>
+
+    <div class="typing-container" id="typing-container">
+        <input type="text" id="hidden-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <div id="text-display">Insert a PDF document above to extract text and begin typing...</div>
+    </div>
+
+    <div class="modal-overlay" id="result-modal">
+        <div class="modal-content">
+            <h2>Time's Up!</h2>
+            <div class="modal-stats">
+                <p>Final WPM: <span id="modal-wpm">0</span></p>
+                <p>Accuracy: <span id="modal-accuracy">100%</span></p>
+                <p>Total Errors: <span id="modal-mistakes">0</span></p>
+            </div>
+            <div class="modal-buttons">
+                <button id="retry-btn">Retry</button>
+                <button id="next-level-btn">Next Level</button>
+            </div>
+        </div>
+    </div>
+	<div class="watermark-overlay">MADE BY DARSHAK</div>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        // DOM Elements
+        const pdfUpload = document.getElementById('pdf-upload');
+        const textDisplay = document.getElementById('text-display');
+        const hiddenInput = document.getElementById('hidden-input');
+        const typingContainer = document.getElementById('typing-container');
+        const timeSelect = document.getElementById('time-select');
+        const resetBtn = document.getElementById('reset-btn');
+        
+        const timeLeftEl = document.getElementById('time-left');
+        const wpmEl = document.getElementById('wpm');
+        const accuracyEl = document.getElementById('accuracy');
+        const mistakesEl = document.getElementById('mistakes');
+
+        // Modal Elements
+        const resultModal = document.getElementById('result-modal');
+        const modalWpm = document.getElementById('modal-wpm');
+        const modalAccuracy = document.getElementById('modal-accuracy');
+        const modalMistakes = document.getElementById('modal-mistakes');
+        const retryBtn = document.getElementById('retry-btn');
+        const nextLevelBtn = document.getElementById('next-level-btn');
+
+        let targetText = "";
+        let timer = null;
+        let timeLeft = 60;
+        let testStarted = false;
+        let testEnded = false;
+        let mistakes = 0;
+        let totalTyped = 0;
+
+        typingContainer.addEventListener('click', () => {
+            if (!testEnded && targetText.length > 0) hiddenInput.focus();
+        });
+
+        pdfUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file && file.type === "application/pdf") {
+                textDisplay.innerHTML = "Extracting ink... please wait.";
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    let fullText = "";
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        fullText += textContent.items.map(item => item.str).join(" ") + " ";
+                    }
+                    
+                    targetText = fullText.replace(/\s+/g, ' ').trim();
+                    if(targetText.length === 0) {
+                        textDisplay.innerHTML = "Blank page. No readable text found.";
+                        return;
+                    }
+                    initTest();
+                } catch (error) {
+                    console.error("Error reading PDF:", error);
+                    textDisplay.innerHTML = "Error extracting text from document.";
+                }
+            }
+        });
+
+        function initTest() {
+            clearInterval(timer);
+            testStarted = false;
+            testEnded = false;
+            mistakes = 0;
+            totalTyped = 0;
+            
+            timeLeft = parseInt(timeSelect.value);
+            timeLeftEl.innerText = `${timeLeft}s`;
+            wpmEl.innerText = "0";
+            accuracyEl.innerText = "100%";
+            mistakesEl.innerText = "0";
+            
+            hiddenInput.value = "";
+            hiddenInput.maxLength = targetText.length;
+            
+            textDisplay.innerHTML = "";
+            targetText.split('').forEach(char => {
+                const span = document.createElement('span');
+                span.innerText = char;
+                span.classList.add('char');
+                textDisplay.appendChild(span);
+            });
+            
+            if(textDisplay.childNodes.length > 0) {
+                textDisplay.childNodes[0].classList.add('active');
+            }
+        }
+
+        function resetEverything() {
+            clearInterval(timer);
+            testStarted = false;
+            testEnded = false;
+            targetText = "";
+            
+            pdfUpload.value = "";
+            timeSelect.value = "60";
+            hiddenInput.value = "";
+            
+            timeLeft = 60;
+            mistakes = 0;
+            totalTyped = 0;
+            timeLeftEl.innerText = "60s";
+            wpmEl.innerText = "0";
+            accuracyEl.innerText = "100%";
+            mistakesEl.innerText = "0";
+            
+            textDisplay.innerHTML = "Insert a PDF document above to extract text and begin typing...";
+        }
+
+        hiddenInput.addEventListener('input', () => {
+            if (testEnded || targetText.length === 0) return;
+            
+            if (!testStarted) {
+                startTimer();
+                testStarted = true;
+            }
+
+            const typedValue = hiddenInput.value;
+            const typedArray = typedValue.split('');
+            const spanArray = textDisplay.querySelectorAll('span');
+            
+            mistakes = 0;
+            totalTyped = typedArray.length;
+
+            spanArray.forEach((span, index) => {
+                const typedChar = typedArray[index];
+                
+                span.classList.remove('correct', 'incorrect', 'active');
+
+                if (typedChar == null) {
+                    if (index === typedArray.length) span.classList.add('active');
+                } else if (typedChar === span.innerText) {
+                    span.classList.add('correct');
+                } else {
+                    span.classList.add('incorrect');
+                    mistakes++;
+                }
+            });
+
+            updateStats();
+            
+            if (typedValue.length === targetText.length) {
+                endTest(true); // User finished the whole text
+            }
+        });
+
+        function startTimer() {
+            timer = setInterval(() => {
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    timeLeftEl.innerText = `${timeLeft}s`;
+                    updateStats();
+                } else {
+                    endTest(false); // Timer ran out
+                }
+            }, 1000);
+        }
+
+        function endTest(completedText = false) {
+            clearInterval(timer);
+            testEnded = true;
+            hiddenInput.blur();
+            
+            const activeSpan = textDisplay.querySelector('.active');
+            if (activeSpan) activeSpan.classList.remove('active');
+
+            // Populate and Show Modal
+            const header = document.querySelector('.modal-content h2');
+            header.innerText = completedText ? "Text Completed!" : "Time's Up!";
+            
+            modalWpm.innerText = wpmEl.innerText;
+            modalAccuracy.innerText = accuracyEl.innerText;
+            modalMistakes.innerText = mistakesEl.innerText;
+            
+            // Short delay before showing modal so the user sees the timer hit 0
+            setTimeout(() => {
+                resultModal.classList.add('show');
+            }, 300);
+        }
+
+        function updateStats() {
+            mistakesEl.innerText = mistakes;
+
+            let accuracy = 100;
+            if (totalTyped > 0) {
+                accuracy = Math.max(0, Math.round(((totalTyped - mistakes) / totalTyped) * 100));
+            }
+            accuracyEl.innerText = `${accuracy}%`;
+
+            const timeElapsed = parseInt(timeSelect.value) - timeLeft;
+            let wpm = 0;
+            if (timeElapsed > 0) {
+                const correctChars = totalTyped - mistakes;
+                wpm = Math.max(0, Math.round((correctChars / 5) / (timeElapsed / 60)));
+            }
+            wpmEl.innerText = wpm;
+        }
+
+        // Standard Resets
+        resetBtn.addEventListener('click', resetEverything);
+        timeSelect.addEventListener('change', () => {
+            if (targetText && !testStarted) initTest();
+        });
+
+        // Modal Button Actions
+        retryBtn.addEventListener('click', () => {
+            resultModal.classList.remove('show');
+            initTest(); // Keeps the current text but restarts the clock/stats
+        });
+
+        nextLevelBtn.addEventListener('click', () => {
+            resultModal.classList.remove('show');
+            resetEverything(); // Clears everything out so they can upload a new PDF
+        });
+	//CREATED BY DARSHAK
+    </script>
+</body>
+</html>
